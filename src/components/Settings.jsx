@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import {
   User, SlidersHorizontal, Sun, Moon, Loader2, LogOut,
-  Mail, Lock, Eye, EyeOff, ShieldCheck, ShieldOff, Download, Palette,
+  Mail, Lock, Eye, EyeOff, ShieldCheck, ShieldOff, Download, Palette, Bell, BellOff,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { PageHeader } from "./ui";
+import { enablePushNotifications } from "../lib/push";
 
 function profileInfo(session) {
   const meta = session?.user?.user_metadata || {};
@@ -147,7 +148,7 @@ function SettingsPanel({ icon, label, full = false, children }) {
   );
 }
 
-/* Page complète Réglages : email, mot de passe, 2FA, export des données, thème.
+/* Page complète Réglages : email, mot de passe, 2FA, notifications, export des données, thème.
    L'identité (avatar + nom) vit dans la page Profil. */
 export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
   const user = session?.user;
@@ -232,6 +233,47 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
       setMfaMsg(err.message || "Impossible de désactiver le 2FA.");
     } finally {
       setMfaBusy(false);
+    }
+  };
+
+  /* --- Notifications push --- */
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState("");
+  const [pushErr, setPushErr] = useState("");
+  const [pushEnabled, setPushEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setPushEnabled(Notification.permission === "granted");
+    }
+  }, []);
+
+  const handleEnablePush = async () => {
+    setPushBusy(true); setPushErr(""); setPushMsg("");
+    try {
+      await enablePushNotifications();
+      setPushEnabled(true);
+      setPushMsg("Notifications activées sur cet appareil.");
+    } catch (err) {
+      setPushErr(err.message || "Impossible d'activer les notifications.");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const sendTestPush = async () => {
+    setPushBusy(true); setPushErr(""); setPushMsg("");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.functions.invoke("send-push", {
+        body: { user_id: user.id, title: "FUNDED.", body: "Ceci est une notification test 🎉", url: "/" },
+      });
+      if (error) throw error;
+      setPushMsg("Notification envoyée, vérifie ton téléphone.");
+    } catch (err) {
+      setPushErr(err.message || "Échec de l'envoi.");
+    } finally {
+      setPushBusy(false);
     }
   };
 
@@ -352,6 +394,31 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
           <button className="btn ghost small" type="button" onClick={exportData} disabled={exportBusy}>
             {exportBusy ? <Loader2 size={14} className="spin" /> : <Download size={13} />} Exporter mes données (JSON)
           </button>
+        </SettingsPanel>
+
+        {/* Notifications push */}
+        <SettingsPanel icon={pushEnabled ? <Bell size={14} /> : <BellOff size={14} />} label="Notifications">
+          <p className="settings-panel-hint">
+            Reçois des alertes directement sur ton téléphone, même l'app fermée.
+            {" "}Sur iPhone : ajoute d'abord l'app à l'écran d'accueil, puis active ici depuis cette icône.
+          </p>
+          <div className="mfa-row">
+            <span className={pushEnabled ? "mfa-pill on" : "mfa-pill off"}>
+              {pushEnabled ? <Bell size={13} /> : <BellOff size={13} />}
+              {pushEnabled ? "Activées" : "Désactivées"}
+            </span>
+            {!pushEnabled ? (
+              <button className="btn primary small" onClick={handleEnablePush} disabled={pushBusy}>
+                {pushBusy ? <Loader2 size={14} className="spin" /> : <Bell size={13} />} Activer
+              </button>
+            ) : (
+              <button className="btn ghost small" onClick={sendTestPush} disabled={pushBusy}>
+                {pushBusy ? <Loader2 size={14} className="spin" /> : <Bell size={13} />} Envoyer une notification test
+              </button>
+            )}
+          </div>
+          {pushErr && <div className="pin-error">{pushErr}</div>}
+          {pushMsg && <div className="auth-info">{pushMsg}</div>}
         </SettingsPanel>
 
         {/* Apparence */}
