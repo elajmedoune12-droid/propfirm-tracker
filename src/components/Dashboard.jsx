@@ -1,0 +1,194 @@
+import React, { useMemo } from "react";
+import { Receipt, Wallet, Target, TrendingUp, CircleDollarSign, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from "recharts";
+import { fmt, fmtSigned } from "../utils/format";
+import { accountsAsOfYear } from "../utils/accountHistory";
+import { StatCard, Dial, TrancheStrip, TrancheBuilder, EmptyState, PageHeader, BarList, PHASES } from "./ui";
+
+const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+
+// Sélecteur d'année : ‹ 2027 › — permet de naviguer librement, sans limite
+// (2028, 2029... ou en arrière sur les années passées).
+function YearSwitcher({ year, onChange }) {
+  return (
+    <div className="year-switcher">
+      <button type="button" className="icon-btn" onClick={() => onChange(year - 1)} aria-label="Année précédente"><ChevronLeft size={16} /></button>
+      <span className="year-switcher-value">{year}</span>
+      <button type="button" className="icon-btn" onClick={() => onChange(year + 1)} aria-label="Année suivante"><ChevronRight size={16} /></button>
+    </div>
+  );
+}
+
+// selectedYear/onChangeYear viennent de App.jsx (et non d'un useState local ici) :
+// Dashboard est démonté à chaque changement d'onglet (key={tab} sur PageTransition
+// dans App.jsx), donc un état local reviendrait à l'année du jour à chaque retour
+// sur l'onglet. En le faisant vivre dans App.jsx, qui ne se démonte jamais, l'année
+// choisie reste mémorisée tant que l'appli reste ouverte.
+export default function Dashboard({ accounts, expenses, payouts, goalTranches, currentYear, saveGoalTranches, accountLabel, firms = [], accountEvents = [], scalingHistory = [], selectedYear, onChangeYear }) {
+  const yearOf = (d) => Number((d || "").slice(0, 4)) || selectedYear;
+
+  // Comptes tels qu'ils étaient au 31/12 de l'année sélectionnée (phase + taille à
+  // cette époque). Un compte funded en 2024 puis breached en 2026 compte comme
+  // "funded" pour 2024/2025, et comme "breached" à partir de 2026.
+  const accountsAsOfSelectedYear = useMemo(
+    () => accountsAsOfYear(accounts, accountEvents, scalingHistory, selectedYear),
+    [accounts, accountEvents, scalingHistory, selectedYear]);
+
+  const fundedAccounts = useMemo(() => accountsAsOfSelectedYear.filter((a) => a.yearPhase === "funded"), [accountsAsOfSelectedYear]);
+  const fundedCapital = useMemo(() => fundedAccounts.reduce((s, a) => s + a.yearSize, 0), [fundedAccounts]);
+  const activeAccounts = useMemo(() => accountsAsOfSelectedYear.filter((a) => a.yearPhase === "phase1" || a.yearPhase === "phase2" || a.yearPhase === "phase3"), [accountsAsOfSelectedYear]);
+  const breachedCount = accountsAsOfSelectedYear.filter((a) => a.yearPhase === "breached").length;
+  const resolvedCount = fundedAccounts.length + breachedCount;
+  const successRate = resolvedCount > 0 ? Math.round((fundedAccounts.length / resolvedCount) * 100) : null;
+
+  const currentYearExp = expenses.filter((e) => yearOf(e.date) === selectedYear).reduce((s, e) => s + Number(e.amount), 0);
+  const currentYearPay = payouts.filter((p) => yearOf(p.date) === selectedYear).reduce((s, p) => s + Number(p.amount), 0);
+  const currentYearNet = currentYearPay - currentYearExp;
+  // ROI de l'année sélectionnée (et non plus all-time), pour rester cohérent avec
+  // le capital financé et le taux de réussite qui suivent désormais eux aussi l'année.
+  const roi = currentYearExp > 0 ? Math.round(((currentYearPay - currentYearExp) / currentYearExp) * 100) : null;
+
+  const prevYearExp = expenses.filter((e) => yearOf(e.date) === selectedYear - 1).reduce((s, e) => s + Number(e.amount), 0);
+  const prevYearPay = payouts.filter((p) => yearOf(p.date) === selectedYear - 1).reduce((s, p) => s + Number(p.amount), 0);
+  const prevYearNet = prevYearPay - prevYearExp;
+  const netTrend = prevYearNet !== 0 ? Math.round(((currentYearNet - prevYearNet) / Math.abs(prevYearNet)) * 100) : null;
+
+  const yearTranches = goalTranches.filter((g) => g.year === selectedYear);
+  const goalTarget = yearTranches.reduce((s, t) => s + t.size * t.count, 0);
+
+  const monthlyChartData = useMemo(() => MONTHS_FR.map((m, idx) => {
+    const exp = expenses.filter((e) => yearOf(e.date) === selectedYear && Number((e.date || "").slice(5, 7)) - 1 === idx).reduce((s, e) => s + Number(e.amount), 0);
+    const pay = payouts.filter((p) => yearOf(p.date) === selectedYear && Number((p.date || "").slice(5, 7)) - 1 === idx).reduce((s, p) => s + Number(p.amount), 0);
+    return { month: m, "Dépenses": exp, "Payouts": pay, "Net": pay - exp };
+  }), [expenses, payouts, selectedYear]);
+
+  const recentActivity = useMemo(() => {
+    const acts = [...expenses.map((e) => ({ ...e, kind: "expense" })), ...payouts.map((p) => ({ ...p, kind: "payout" }))];
+    return acts.sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 6);
+  }, [expenses, payouts]);
+
+  const phaseBreakdown = useMemo(() => PHASES.map((p) => ({
+    label: p.label,
+    value: accountsAsOfSelectedYear.filter((a) => a.yearPhase === p.id).length,
+    display: `${accountsAsOfSelectedYear.filter((a) => a.yearPhase === p.id).length}`,
+    color: p.color,
+  })).filter((p) => p.value > 0), [accountsAsOfSelectedYear]);
+
+  const firmBreakdown = useMemo(() => {
+    const byFirm = {};
+    fundedAccounts.forEach((a) => {
+      const name = firms.find((f) => f.id === a.firm_id)?.name || "Autre";
+      byFirm[name] = (byFirm[name] || 0) + Number(a.yearSize || 0);
+    });
+    return Object.entries(byFirm)
+      .map(([label, value]) => ({ label, value, display: fmt(value) }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+  }, [fundedAccounts, firms]);
+
+  return (
+    <div className="tab-content">
+      <PageHeader
+        eyebrow="Année"
+        title="Tableau de bord"
+        sub="Vue d'ensemble de tes comptes prop firm."
+        action={<YearSwitcher year={selectedYear} onChange={onChangeYear} />}
+      />
+
+      <div className="stat-grid">
+        <StatCard icon={Wallet} label="Capital financé" value={fmt(fundedCapital)} sub={`${fundedAccounts.length}/${accountsAsOfSelectedYear.length} compte(s) · ${activeAccounts.length} actif(s)`} />
+        <StatCard icon={Target} label="Taux de réussite" value={successRate === null ? "—" : `${successRate}%`} sub={`${fundedAccounts.length} financé(s) / ${breachedCount} échoué(s)`} />
+        <StatCard icon={TrendingUp} label="ROI (année)" value={roi === null ? "—" : `${roi >= 0 ? "+" : ""}${roi}%`} accent={roi >= 0 ? "#35D28A" : "#F2496B"} sub={`${fmt(currentYearPay)} reçus / ${fmt(currentYearExp)} investis`} />
+        <StatCard icon={CircleDollarSign} label="P&L net (année)" value={fmtSigned(currentYearNet)} accent={currentYearNet >= 0 ? "#35D28A" : "#F2496B"} trend={netTrend} />
+      </div>
+
+      <div className="dash-grid">
+        <div className="panel">
+          <div className="panel-header"><span>Dépenses vs Payouts — {selectedYear}</span></div>
+          <div className="chart-box">
+            <ResponsiveContainer>
+              <ComposedChart data={monthlyChartData} barGap={3} margin={{ left: -18, top: 6 }}>
+                <defs>
+                  <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F2496B" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#F2496B" stopOpacity={0.55} />
+                  </linearGradient>
+                  <linearGradient id="gradPayout" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#35D28A" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#35D28A" stopOpacity={0.55} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E2434" vertical={false} />
+                <XAxis dataKey="month" stroke="#5B6478" fontSize={11} tickLine={false} axisLine={{ stroke: "#232937" }} />
+                <YAxis stroke="#5B6478" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                <Tooltip
+                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                  contentStyle={{ background: "#171C27", border: "1px solid #242B3A", borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: "#E7EAF0", marginBottom: 4, fontWeight: 600 }}
+                  formatter={(v) => fmt(v)}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Dépenses" fill="url(#gradExpense)" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="Payouts" fill="url(#gradPayout)" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                <Line
+                  type="monotone" dataKey="Net" stroke="#F7B731" strokeWidth={2.25}
+                  dot={{ r: 3, fill: "#F7B731", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: "#F7B731", stroke: "#171C27", strokeWidth: 2 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="panel goal-panel">
+          <div className="panel-header"><span>Objectif de financement {selectedYear}</span></div>
+          {yearTranches.length > 0 ? (
+            <div className="goal-dial-block">
+              <Dial value={fundedCapital} target={goalTarget} />
+              <TrancheStrip tranches={yearTranches} fundedAccounts={fundedAccounts} />
+              <div className="goal-dial-caption">{fmt(fundedCapital)} financé sur {fmt(goalTarget)}</div>
+            </div>
+          ) : (
+            <div className="goal-set-inline">
+              <p className="modal-text">Aucun objectif pour {selectedYear}. Ex: 2×50K + 1×200K + 1×100K + 4×25K = 500K.</p>
+              <TrancheBuilder onSave={(list) => saveGoalTranches(selectedYear, list)} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="dash-grid-secondary">
+        <div className="panel">
+          <div className="panel-header"><span>Comptes par phase</span></div>
+          <BarList items={phaseBreakdown} emptyLabel="Ajoute un compte pour voir la répartition." />
+        </div>
+        <div className="panel">
+          <div className="panel-header"><span>Capital par firme</span><span className="panel-header-sub">Comptes financés uniquement</span></div>
+          <BarList items={firmBreakdown} emptyLabel="Aucun compte financé pour l'instant." />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header"><span>Activité récente</span></div>
+        {recentActivity.length === 0 ? (
+          <EmptyState icon={Receipt} title="Aucune activité" sub="Ajoute une dépense ou un payout pour commencer." />
+        ) : (
+          <div className="table-wrap">
+            <table className="table"><tbody>
+              {recentActivity.map((a) => (
+                <tr key={a.id}>
+                  <td className="dim">{a.date}</td>
+                  <td>{a.kind === "payout" ? <span className="tag" style={{ "--c": "#35D28A" }}>Payout</span> : <span className="tag" style={{ "--c": "#F2496B" }}>Dépense</span>}</td>
+                  <td className="ellipsis-cell">{a.kind === "payout" ? accountLabel(a.account_id) : a.description || a.category}</td>
+                  <td className="num" style={{ color: a.kind === "payout" ? "#35D28A" : "#F2496B" }}>{a.kind === "payout" ? "+" : "-"}{fmt(a.amount)}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
