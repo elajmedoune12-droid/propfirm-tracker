@@ -264,12 +264,18 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
   const sendTestPush = async () => {
     setPushBusy(true); setPushErr(""); setPushMsg("");
     try {
-      if (!user?.id) throw new Error("Session introuvable, reconnecte-toi puis réessaie.");
-      const { error } = await supabase.functions.invoke("send-push", {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.functions.invoke("send-push", {
         body: { user_id: user.id, title: "FUNDED.", body: "Ceci est une notification test 🎉", url: "/" },
       });
       if (error) throw error;
-      setPushMsg("Notification envoyée, vérifie ton téléphone.");
+      if (data.total === 0) {
+        setPushErr("Aucun appareil enregistré pour recevoir des notifications. Clique d'abord sur \"Activer\" sur l'appareil où tu veux les recevoir.");
+      } else if (data.succeeded === 0) {
+        setPushErr("Échec de l'envoi : " + (data.errors?.[0] || "erreur inconnue"));
+      } else {
+        setPushMsg(`Envoyée à ${data.succeeded}/${data.total} appareil(s).`);
+      }
     } catch (err) {
       setPushErr(err.message || "Échec de l'envoi.");
     } finally {
