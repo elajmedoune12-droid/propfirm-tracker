@@ -264,7 +264,7 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
   const sendTestPush = async () => {
     setPushBusy(true); setPushErr(""); setPushMsg("");
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error("Session introuvable, reconnecte-toi puis réessaie.");
       const { error } = await supabase.functions.invoke("send-push", {
         body: { user_id: user.id, title: "FUNDED.", body: "Ceci est une notification test 🎉", url: "/" },
       });
