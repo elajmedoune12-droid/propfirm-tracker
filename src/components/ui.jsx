@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, Target, CircleDollarSign, X, ChevronRight, ChevronLeft, Sun, Moon, Building2, Layers, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, Target, CircleDollarSign, X, ChevronRight, ChevronLeft, Sun, Moon, Building2, Layers, CheckCircle2, AlertTriangle, Loader2, PiggyBank } from "lucide-react";
 import { fmt } from "../utils/format";
 import { ProfileButton, UserPopup, LogoutConfirm } from "./Settings";
 
@@ -314,6 +314,7 @@ export function Sidebar({ tab, setTab, session, onOpenSettings, onOpenProfile, o
     { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { id: "firms", label: "Firmes", icon: Building2 },
     { id: "accounts", label: "Comptes", icon: Wallet },
+    { id: "personal", label: "Compte propre", icon: PiggyBank },
     { id: "expenses", label: "Dépenses", icon: Receipt },
     { id: "payouts", label: "Payouts", icon: TrendingUp },
     { id: "goals", label: "Objectifs", icon: Target },

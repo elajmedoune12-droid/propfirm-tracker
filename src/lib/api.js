@@ -207,3 +207,79 @@ export async function deleteGoalYear(year) {
   const { error } = await supabase.from("goal_tranches").delete().eq("year", year);
   check(error);
 }
+/* ---------------- Compte propre (perso) ---------------- */
+export async function getPersonalAccount() {
+  const { data, error } = await supabase.from("personal_account").select("*").maybeSingle();
+  check(error);
+  return data;
+}
+export async function upsertPersonalAccount(patch) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from("personal_account")
+    .upsert({ user_id: user.id, ...patch }, { onConflict: "user_id" })
+    .select()
+    .single();
+  check(error);
+  return data;
+}
+
+export async function listBalanceHistory() {
+  const { data, error } = await supabase
+    .from("personal_balance_history")
+    .select("*")
+    .order("entry_date", { ascending: true });
+  check(error);
+  return data;
+}
+export async function addBalanceEntry(balance, note, entryDate, depositAmount = 0, weeklyPnl = 0) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase.from("personal_balance_history").insert({
+    user_id: user.id,
+    balance: Number(balance),
+    note: note || null,
+    entry_date: entryDate || new Date().toISOString().slice(0, 10),
+    deposit_amount: Number(depositAmount) || 0,
+    weekly_pnl: Number(weeklyPnl) || 0,
+  });
+  check(error);
+}
+export async function removeBalanceEntry(id) {
+  const { error } = await supabase.from("personal_balance_history").delete().eq("id", id);
+  check(error);
+}
+
+export async function listMilestones() {
+  const { data, error } = await supabase
+    .from("personal_milestones")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  check(error);
+  return data;
+}
+export async function createMilestone(label, targetBalance, sortOrder) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase.from("personal_milestones").insert({
+    user_id: user.id,
+    label,
+    target_balance: Number(targetBalance),
+    sort_order: sortOrder,
+  });
+  check(error);
+}
+export async function removeMilestone(id) {
+  const { error } = await supabase.from("personal_milestones").delete().eq("id", id);
+  check(error);
+}
+export async function markMilestoneAchieved(id, achieved) {
+  const { error } = await supabase
+    .from("personal_milestones")
+    .update({ achieved_at: achieved ? new Date().toISOString() : null })
+    .eq("id", id);
+  check(error);
+}
+
+export async function updateBalanceEntry(id, patch) {
+  const { error } = await supabase.from("personal_balance_history").update(patch).eq("id", id);
+  check(error);
+}

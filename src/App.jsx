@@ -14,6 +14,7 @@ import Goals from "./components/Goals";
 import Profile from "./components/Profile";
 import PageTransition from "./components/PageTransition";
 import { SkeletonList } from "./components/Skeleton";
+import PersonalAccount from "./components/PersonalAccount";
 import * as api from "./lib/api";
 
 export default function App() {
@@ -210,6 +211,7 @@ export default function App() {
               )}
               {tab === "firms" && <Firms firms={firms} accounts={accounts} reload={reload} />}
               {tab === "accounts" && <Accounts accounts={accounts} firms={firms} payouts={payouts} reload={reload} />}
+              {tab === "personal" && <PersonalAccount />}
               {tab === "expenses" && <Expenses expenses={expenses} accounts={accounts} firms={firms} reload={reload} />}
               {tab === "payouts" && <Payouts payouts={payouts} accounts={accounts} firms={firms} reload={reload} />}
               {tab === "goals" && (
