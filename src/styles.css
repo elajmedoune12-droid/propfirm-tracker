@@ -28,7 +28,7 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; margin: 0; }
 .app-root { display: flex; height: 100vh; overflow: hidden; }
 .loading-screen { display: flex; align-items: center; justify-content: center; width: 100%; height: 100vh; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; }
 
-/* ================= Skeletons (écrans de chargement) ================= */
+/* ================= Skeletons (écrans de chargement ponctuels) ================= */
 :root { --skeleton-bg: #232937; --skeleton-bg-soft: #1B2130; }
 :root[data-theme="light"] { --skeleton-bg: #E1DED3; --skeleton-bg-soft: #EDEAE0; }
 
@@ -38,10 +38,6 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; margin: 0; }
 
 .skeleton-line { background: var(--skeleton-bg); border-radius: 8px; }
 .skeleton-line-soft { background: var(--skeleton-bg-soft); }
-
-.skeleton-list { display: flex; flex-direction: column; gap: 8px; }
-.skeleton-list-row { display: flex; align-items: center; gap: 12px; }
-
 .skeleton-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 
 /* ================= Sidebar ================= */
@@ -653,6 +649,7 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; margin: 0; }
     z-index: 45;
   }
   .mobile-header .brand { padding: 0; }
+
 
   /* Le contenu principal garde sa place entre le header du haut et la barre fixe du bas */
   .main { padding: calc(52px + env(safe-area-inset-top) + 20px) 20px calc(74px + env(safe-area-inset-bottom) + 20px); height: 100vh; }

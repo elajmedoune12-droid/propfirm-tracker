@@ -181,7 +181,7 @@ export default function App() {
       />
       <main className="main" ref={mainRef} onScroll={handleMainScroll}>
         {!dataLoaded ? (
-          <SkeletonList />
+          <div className="loading-screen">Chargement de tes données…</div>
         ) : (
           <AnimatePresence mode="wait">
             <PageTransition key={tab}>
@@ -210,7 +210,7 @@ export default function App() {
                   selectedYear={dashboardYear} onChangeYear={setDashboardYear} />
               )}
               {tab === "firms" && <Firms firms={firms} accounts={accounts} reload={reload} />}
-              {tab === "accounts" && <Accounts accounts={accounts} firms={firms} payouts={payouts} reload={reload} />}
+              {tab === "accounts" && <Accounts accounts={accounts} firms={firms} payouts={payouts} expenses={expenses} reload={reload} />}
               {tab === "personal" && <PersonalAccount />}
               {tab === "expenses" && <Expenses expenses={expenses} accounts={accounts} firms={firms} reload={reload} />}
               {tab === "payouts" && <Payouts payouts={payouts} accounts={accounts} firms={firms} reload={reload} />}

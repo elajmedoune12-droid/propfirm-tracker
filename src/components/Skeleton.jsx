@@ -1,7 +1,7 @@
 // Écrans de chargement "squelette" : remplacent le texte "Chargement…" par
 // des blocs qui reprennent la forme du contenu réel, avec un effet de pulsation.
-// Pas de Tailwind ici : on reste sur le même système que le reste de l'app
-// (classes .panel / variables CSS --skeleton-bg définies dans styles.css).
+// La mise en page (flex, largeurs) est en style inline exprès, pour ne dépendre
+// d'aucune règle CSS externe qui pourrait entrer en conflit.
 
 export const SkeletonCard = () => (
   <div className="panel skeleton-pulse">
@@ -12,15 +12,28 @@ export const SkeletonCard = () => (
 );
 
 export const SkeletonList = () => (
-  <div className="skeleton-list">
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', boxSizing: 'border-box' }}>
     {[...Array(5)].map((_, i) => (
-      <div key={i} className="panel skeleton-pulse skeleton-list-row">
-        <div className="skeleton-line" style={{ width: 6, height: 40, borderRadius: 999, flexShrink: 0 }} />
+      <div
+        key={i}
+        className="panel skeleton-pulse"
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div
+          className="skeleton-line"
+          style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="skeleton-line" style={{ height: 12, width: '33%', marginBottom: 8 }} />
-          <div className="skeleton-line skeleton-line-soft" style={{ height: 10, width: '25%' }} />
+          <div className="skeleton-line" style={{ height: 12, width: '60%', marginBottom: 8 }} />
+          <div className="skeleton-line skeleton-line-soft" style={{ height: 10, width: '40%' }} />
         </div>
-        <div className="skeleton-line skeleton-line-soft" style={{ width: 40, height: 20 }} />
       </div>
     ))}
   </div>

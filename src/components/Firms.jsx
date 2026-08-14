@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from "react";
 import {
   Building2, Plus, Trash2, Pencil, Wallet, Search, Loader2, AlertTriangle, AlertCircle,
-  Globe, ChevronDown, ChevronUp, MessageCircle, ShieldAlert, RotateCcw, StickyNote,
+  Globe, ShieldAlert, Eye,
 } from "lucide-react";
+import FirmDetails from "./FirmDetails";
 import { fmt } from "../utils/format";
 import * as api from "../lib/api";
 import { FieldRow, EmptyState, PageHeader, PhaseBadge, ChallengeTag, AssetTag } from "./ui";
 
 const blankForm = {
   name: "", max_allocation: "",
-  consistency_rule_pct: "", refunds_fee: false,
+  consistency_rule_pct: "", refund_after_payouts: "",
   website: "", support_contact: "", notes: "",
 };
 
@@ -38,8 +39,7 @@ function DeleteFirmConfirm({ firm, busy, onCancel, onConfirm }) {
 
 /* Une carte firme : extraite pour garder le rendu de la liste lisible
    et pouvoir mémoïser les calculs par firme si besoin plus tard. */
-function FirmCard({ firm, accounts, onEdit, onDeleteRequest }) {
-  const [expanded, setExpanded] = useState(false);
+function FirmCard({ firm, accounts, onEdit, onDeleteRequest, onDetails }) {
   const accs = useMemo(() => accounts.filter((a) => a.firm_id === firm.id), [accounts, firm.id]);
   const alloc = useMemo(
     () => accs.filter((a) => a.phase !== "breached").reduce((s, a) => s + Number(a.size), 0),
@@ -50,7 +50,6 @@ function FirmCard({ firm, accounts, onEdit, onDeleteRequest }) {
   const over = hasMax && alloc > firm.max_allocation;
 
   const websiteHref = firm.website && !/^https?:\/\//i.test(firm.website) ? `https://${firm.website}` : firm.website;
-  const hasDetails = firm.support_contact || firm.notes || firm.refunds_fee;
 
   return (
     <div className="firm-card">
@@ -68,6 +67,9 @@ function FirmCard({ firm, accounts, onEdit, onDeleteRequest }) {
               <Globe size={14} />
             </a>
           )}
+          <button className="icon-btn" onClick={() => onDetails(firm)} title="Voir le détail" aria-label={`Détails de ${firm.name}`}>
+            <Eye size={14} />
+          </button>
           <button className="icon-btn" onClick={() => onEdit(firm)} title="Modifier" aria-label={`Modifier ${firm.name}`}>
             <Pencil size={14} />
           </button>
@@ -116,25 +118,7 @@ function FirmCard({ firm, accounts, onEdit, onDeleteRequest }) {
         </div>
       )}
 
-      {hasDetails && (
-        <div className="creds-block">
-          <button className="creds-toggle" onClick={() => setExpanded((v) => !v)}>
-            Détails {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
-          {expanded && (
-            <div className="creds-detail">
-              <div className="creds-line"><span className="dim"><RotateCcw size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Frais remboursé</span><span>{firm.refunds_fee ? "Oui, au 1er payout" : "Non"}</span></div>
-              {firm.support_contact && (
-                <div className="creds-line"><span className="dim"><MessageCircle size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Contact</span><span>{firm.support_contact}</span></div>
-              )}
-              {firm.notes && (
-                <div className="firm-notes"><StickyNote size={12} style={{ verticalAlign: -2, marginRight: 4 }} />{firm.notes}</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      </div>
   );
 }
 
@@ -151,6 +135,7 @@ export default function Firms({ firms, accounts, reload }) {
   const [deleteTarget, setDeleteTarget] = useState(null); // firm en attente de confirmation
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteErr, setDeleteErr] = useState("");
+  const [detailsFirm, setDetailsFirm] = useState(null);
 
   const closeForm = () => { setShowForm(false); setForm(blankForm); setEditingId(null); setFormErr(""); };
 
@@ -172,7 +157,7 @@ export default function Firms({ firms, accounts, reload }) {
       const payload = {
         name, max_allocation: maxAlloc,
         consistency_rule_pct: consistency,
-        refunds_fee: form.refunds_fee,
+        refund_after_payouts: form.refund_after_payouts === "" ? null : Number(form.refund_after_payouts),
         website: form.website.trim() || null,
         support_contact: form.support_contact.trim() || null,
         notes: form.notes.trim() || null,
@@ -195,7 +180,7 @@ export default function Firms({ firms, accounts, reload }) {
     setForm({
       name: f.name, max_allocation: f.max_allocation || "",
       consistency_rule_pct: f.consistency_rule_pct ?? "",
-      refunds_fee: f.refunds_fee || false,
+      refund_after_payouts: f.refund_after_payouts ?? "",
       website: f.website || "", support_contact: f.support_contact || "", notes: f.notes || "",
     });
     setFormErr("");
@@ -262,7 +247,7 @@ export default function Firms({ firms, accounts, reload }) {
           ) : (
             <div className="card-grid">
               {filteredSortedFirms.map((f) => (
-                <FirmCard key={f.id} firm={f} accounts={accounts} onEdit={startEdit} onDeleteRequest={requestDelete} />
+                <FirmCard key={f.id} firm={f} accounts={accounts} onEdit={startEdit} onDeleteRequest={requestDelete} onDetails={setDetailsFirm} />
               ))}
             </div>
           )}
@@ -288,12 +273,9 @@ export default function Firms({ firms, accounts, reload }) {
                   <input className="input" type="number" min="0" max="100" placeholder="ex: 30" value={form.consistency_rule_pct}
                     onChange={(e) => setForm({ ...form, consistency_rule_pct: e.target.value })} />
                 </label>
-                <label style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                  <span style={{ visibility: "hidden" }}>.</span>
-                  <span className="checkbox-row" style={{ marginBottom: 0 }}>
-                    <input type="checkbox" checked={form.refunds_fee} onChange={(e) => setForm({ ...form, refunds_fee: e.target.checked })} />
-                    <span>Frais de challenge remboursé au 1er payout</span>
-                  </span>
+                <label>Frais remboursé après combien de payouts ?
+                  <input className="input" type="number" min="0" placeholder="ex: 2 (0 ou vide = jamais)" value={form.refund_after_payouts}
+                    onChange={(e) => setForm({ ...form, refund_after_payouts: e.target.value })} />
                 </label>
               </FieldRow>
 
@@ -337,6 +319,15 @@ export default function Firms({ firms, accounts, reload }) {
             <div className="modal-actions"><button className="btn ghost" onClick={() => setDeleteErr("")}>Fermer</button></div>
           </div>
         </div>
+      )}
+
+      {detailsFirm && (
+        <FirmDetails
+          firm={detailsFirm}
+          accounts={accounts.filter((a) => a.firm_id === detailsFirm.id)}
+          onClose={() => setDetailsFirm(null)}
+          onEdit={(f) => { setDetailsFirm(null); startEdit(f); }}
+        />
       )}
     </div>
   );

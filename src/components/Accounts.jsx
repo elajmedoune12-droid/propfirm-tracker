@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import AccountDetails from "./AccountDetails";
 import {
   Building2, Plus, Trash2, Pencil, Zap, KeyRound, ChevronDown, ChevronUp, Eye, EyeOff,
   Lock, Unlock, AlertTriangle, Clock, History, Search, X as XIcon, ArrowRight, SlidersHorizontal, CalendarClock,
@@ -65,7 +66,7 @@ function BreachReasonModal({ onClose, onSubmit }) {
   );
 }
 
-export default function Accounts({ accounts, firms, payouts, reload }) {
+export default function Accounts({ accounts, firms, payouts, expenses, reload }) {
   const [showForm, setShowForm] = useState(false);
   const blank = {
     firm_id: "", size: "", cost: "", phase: "phase1", purchase_date: todayStr(), challenge_deadline: "",
@@ -79,6 +80,7 @@ export default function Accounts({ accounts, firms, payouts, reload }) {
   const [editingId, setEditingId] = useState(null);
 
   const [expandedId, setExpandedId] = useState(null);
+  const [detailsId, setDetailsId] = useState(null);
   const [historyByAccount, setHistoryByAccount] = useState({});
 
   const [search, setSearch] = useState("");
@@ -500,6 +502,7 @@ export default function Accounts({ accounts, firms, payouts, reload }) {
                     <div className="account-size">{fmt(a.size)}{a.initial_size && a.size !== a.initial_size && <span className="dim"> (init. {fmt(a.initial_size)})</span>}</div>
                   </div>
                   <div className="card-actions">
+                    <button className="icon-btn" onClick={() => setDetailsId(a.id)} title="Voir le détail"><Eye size={14} /></button>
                     <button className="icon-btn" onClick={() => startEdit(a)}><Pencil size={14} /></button>
                     <button className="icon-btn" onClick={async () => { await api.removeLinkedPurchaseExpense(a.id); await api.removeAccount(a.id); reload(); }}><Trash2 size={14} /></button>
                   </div>
@@ -654,6 +657,17 @@ export default function Accounts({ accounts, firms, payouts, reload }) {
             setBreachTarget(null);
             reload();
           }}
+        />
+      )}
+
+      {detailsId && (
+        <AccountDetails
+          account={accounts.find((x) => x.id === detailsId)}
+          firm={firms.find((f) => f.id === accounts.find((x) => x.id === detailsId)?.firm_id)}
+          payoutsForAccount={payouts.filter((p) => p.account_id === detailsId)}
+          scalingHistory={historyByAccount[detailsId] || []}
+          onClose={() => setDetailsId(null)}
+          onEdit={(a) => startEdit(a)}
         />
       )}
     </div>

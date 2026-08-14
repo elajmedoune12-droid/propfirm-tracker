@@ -28,20 +28,17 @@ export const daysUntil = (dateStr) => {
 // aujourd'hui, pour retomber juste sur la bonne échéance peu importe depuis
 // quand le compte est financé.
 export function nextPayoutDate(anchorDate, frequency) {
+  // Un seul pas depuis le jour de reprise du trading — pas de saut automatique
+  // vers plusieurs cycles dans le futur si le compte est resté inactif.
+  // Si la date tombée est dépassée, c'est un vrai retard à afficher tel quel,
+  // pas à masquer en avançant silencieusement.
   if (!anchorDate || !frequency || frequency === "on_demand" || frequency === "other") return null;
-  const today = new Date(todayStr());
   let cursor = new Date(anchorDate);
   if (Number.isNaN(cursor.getTime())) return null;
-  const step = () => {
-    if (frequency === "weekly") cursor.setDate(cursor.getDate() + 7);
-    else if (frequency === "bi_weekly") cursor.setDate(cursor.getDate() + 14);
-    else if (frequency === "monthly") cursor.setMonth(cursor.getMonth() + 1);
-    else return false;
-    return true;
-  };
-  if (!step()) return null; // fréquence inconnue
-  let guard = 0;
-  while (cursor <= today && guard < 1000) { if (!step()) return null; guard++; }
+  if (frequency === "weekly") cursor.setDate(cursor.getDate() + 7);
+  else if (frequency === "bi_weekly") cursor.setDate(cursor.getDate() + 14);
+  else if (frequency === "monthly") cursor.setMonth(cursor.getMonth() + 1);
+  else return null;
   return cursor.toISOString().slice(0, 10);
 }
 
