@@ -3,7 +3,7 @@ import { Plus, Trash2, Pencil, Loader2, AlertTriangle, AlertCircle, X } from "lu
 import { fmt, fmtSigned } from "../utils/format";
 import * as api from "../lib/api";
 import { Dial, TrancheStrip, TrancheBuilder, PageHeader, EmptyState } from "./ui";
-import { accountsAsOfYear } from "../utils/accountHistory";
+import { accountsAsOfYear, fundedYearOf } from "../utils/accountHistory";
 
 /* Confirmation avant suppression — un objectif supprimé perd tous ses paliers,
    aucune récupération possible. */
@@ -160,7 +160,9 @@ export default function Goals({ accounts, expenses, payouts, goalTranches, curre
             const target = tranches.reduce((s, t) => s + t.size * t.count, 0);
             const t = totalsForYear(y);
             const accountsOfYear = accountsAsOfYear(accounts, accountEvents, scalingHistory, y);
-            const fundedAccounts = accountsOfYear.filter((a) => a.yearPhase === "funded");
+            const fundedAccounts = accountsOfYear.filter(
+              (a) => a.yearPhase === "funded" && fundedYearOf(a.id, accountEvents) === y
+            );
             const fundedCapital = fundedAccounts.reduce((s, a) => s + a.yearSize, 0);
             return (
               <div key={y} className="goal-card">

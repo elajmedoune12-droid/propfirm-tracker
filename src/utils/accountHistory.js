@@ -34,3 +34,13 @@ export function accountsAsOfYear(accounts, accountEvents, scalingHistory, year) 
     })
     .filter((a) => a.yearPhase !== null);
 }
+
+// Année où un compte est devenu "funded" pour la première fois (à partir de son
+// historique d'évènements). Sert à ne compter un compte que pour l'objectif de
+// l'année où il a été financé, pas pour chaque année suivante où il l'est resté.
+export function fundedYearOf(accountId, events) {
+  const evs = events
+    .filter((e) => e.account_id === accountId && e.phase === "funded")
+    .sort((a, b) => (a.event_date < b.event_date ? -1 : 1));
+  return evs.length > 0 ? Number(evs[0].event_date.slice(0, 4)) : null;
+}
