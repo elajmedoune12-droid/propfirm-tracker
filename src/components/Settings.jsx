@@ -276,11 +276,13 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
   const sendTestPush = async () => {
     setPushBusy(true); setPushErr(""); setPushMsg("");
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase.functions.invoke("send-push", {
-        body: { user_id: user.id, title: "FUNDED.", body: "Ceci est une notification test 🎉", url: "/" },
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/push-test", {
+        method: "POST",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (data.total === 0) {
         setPushErr("Aucun appareil enregistré pour recevoir des notifications. Clique d'abord sur \"Activer\" sur l'appareil où tu veux les recevoir.");
       } else if (data.succeeded === 0) {
