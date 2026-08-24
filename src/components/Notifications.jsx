@@ -247,7 +247,7 @@ export function NotificationBell({ items = [], onNavigate }) {
       </button>
       {open && (
         <>
-          <div className="popup-scrim" onClick={() => setOpen(false)} />
+          <div className="notif-scrim" onClick={() => setOpen(false)} />
           <div className="notif-panel" role="dialog" aria-label="Notifications">
             <div className="notif-head">
               <span>Notifications</span>

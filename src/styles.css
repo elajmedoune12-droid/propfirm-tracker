@@ -1043,7 +1043,7 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; margin: 0; letter-spacing
   border-radius: 999px; background: var(--gold); color: #15130c;
   font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
 }
-.popup-scrim { position: fixed; inset: 0; z-index: 78; background: transparent; }
+.notif-scrim { position: fixed; inset: 0; z-index: 78; background: transparent; }
 .notif-panel {
   position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 79;
   width: 320px; max-width: calc(100vw - 24px);
