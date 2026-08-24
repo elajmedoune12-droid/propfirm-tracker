@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, Target, CircleDollarSign, X, ChevronRight, ChevronLeft, Sun, Moon, Building2, Layers, CheckCircle2, AlertTriangle, Loader2, PiggyBank } from "lucide-react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { LayoutDashboard, Wallet, Receipt, TrendingUp, TrendingDown, Target, CircleDollarSign, X, ChevronRight, ChevronLeft, Sun, Moon, Building2, CheckCircle2, AlertTriangle, Loader2, PiggyBank } from "lucide-react";
 import { fmt } from "../utils/format";
-import { ProfileButton, UserPopup, LogoutConfirm } from "./Settings";
+import { ProfileButton, UserPopup, LogoutConfirm, AvatarGlyph, profileInfo } from "./Settings";
+import { NotificationBell } from "./Notifications";
 
 export function ThemeToggle({ theme, onToggle, variant = "floating" }) {
   if (variant === "sidebar") {
@@ -9,6 +10,16 @@ export function ThemeToggle({ theme, onToggle, variant = "floating" }) {
       <button className="sidebar-theme-toggle" onClick={onToggle}>
         <span>{theme === "dark" ? "Mode sombre" : "Mode clair"}</span>
         {theme === "dark" ? <Moon size={14} /> : <Sun size={14} />}
+      </button>
+    );
+  }
+  if (variant === "static") {
+    // Même style que flottant mais DANS le flux (nav landing, carte auth)
+    // pour ne rien masquer.
+    return (
+      <button className="theme-toggle theme-toggle-static" onClick={onToggle}>
+        {theme === "dark" ? <Moon size={14} /> : <Sun size={14} />}
+        <span>{theme === "dark" ? "Sombre" : "Clair"}</span>
       </button>
     );
   }
@@ -143,11 +154,11 @@ export function Dial({ value, target, size = 128, color = "#E8B94D" }) {
             const big = i % 6 === 0;
             return (
               <line key={i} x1={0} y1={-(r + 4)} x2={0} y2={-(r + (big ? 9 : 6))}
-                stroke="#2A3142" strokeWidth={big ? 1.6 : 1} transform={`rotate(${angle})`} />
+                stroke="var(--chart-axis)" strokeWidth={big ? 1.6 : 1} transform={`rotate(${angle})`} />
             );
           })}
         </g>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1B2130" strokeWidth={9} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--skeleton-bg)" strokeWidth={9} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={9}
           strokeLinecap="round" strokeDasharray={`${dash} ${c - dash}`}
           transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dasharray 0.6s ease" }} />
@@ -303,12 +314,31 @@ export function PageHeader({ eyebrow, title, sub, action }) {
   );
 }
 
-export function Sidebar({ tab, setTab, session, onOpenSettings, onOpenProfile, onSignOut }) {
+export function Sidebar({ tab, setTab, session, onOpenSettings, onOpenProfile, onSignOut, notifications = [] }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar_collapsed") === "true");
   useEffect(() => { localStorage.setItem("sidebar_collapsed", collapsed); }, [collapsed]);
 
   const [showPopup, setShowPopup] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobilePopup, setMobilePopup] = useState(false);
+
+  // Ferme drawer + popup à chaque navigation
+  useEffect(() => { setMobileOpen(false); setMobilePopup(false); }, [tab]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e) => e.key === "Escape" && setMobileOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
+  // Drawer fermée = sortie de l'arbre accessible et du focus (attribut inert,
+  // géré via ref car React 18 ne supporte pas le booléen en prop). On évite
+  // ainsi aria-hidden, que Chrome signale quand un bouton garde le focus.
+  const drawerRef = useRef(null);
+  useLayoutEffect(() => {
+    if (drawerRef.current) drawerRef.current.inert = !mobileOpen;
+  }, [mobileOpen]);
 
   const items = [
     { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -321,12 +351,63 @@ export function Sidebar({ tab, setTab, session, onOpenSettings, onOpenProfile, o
   ];
   return (
     <>
-      {/* Header mobile : masqué en desktop (voir .mobile-header), affiché en <= 860px
-          quand la sidebar devient une barre de nav fixée en bas de l'écran. */}
+      {/* ===== Header mobile (<= 860px) : burger + logo à gauche,
+            avatar compact à droite qui ouvre le menu du compte ===== */}
       <div className="mobile-header">
-        <div className="brand"><CircleDollarSign size={18} className="brand-icon" /><span>FUNDED<span className="brand-dot">.</span></span></div>
+        <div className="mobile-header-left">
+          <button
+            className={"hamburger-btn" + (mobileOpen ? " open" : "")}
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            aria-expanded={mobileOpen}
+          >
+            <span /><span /><span />
+          </button>
+          <div className="brand"><CircleDollarSign size={18} className="brand-icon" /><span>FUNDED<span className="brand-dot">.</span></span></div>
+        </div>
+
+        <div className="mobile-user-wrap">
+          <div className="mobile-actions">
+            <NotificationBell items={notifications} onNavigate={setTab} />
+            <button
+              className="mobile-avatar-btn"
+              onClick={() => setMobilePopup((v) => !v)}
+              aria-label="Menu du compte"
+            >
+              <AvatarGlyph info={profileInfo(session)} />
+            </button>
+          </div>
+          {mobilePopup && (
+            <UserPopup
+              session={session}
+              onClose={() => setMobilePopup(false)}
+              onOpenProfile={() => { setMobilePopup(false); onOpenProfile(); }}
+              onOpenSettings={() => { setMobilePopup(false); onOpenSettings(); }}
+              onLogoutRequest={() => { setMobilePopup(false); setShowLogoutConfirm(true); }}
+            />
+          )}
+        </div>
       </div>
 
+      {/* Drawer mobile : overlay + panneau latéral */}
+      <div className={"drawer-scrim" + (mobileOpen ? " open" : "")} onClick={() => setMobileOpen(false)} />
+      <aside ref={drawerRef} className={"mobile-drawer" + (mobileOpen ? " open" : "")}>
+        <div className="drawer-head">
+          <div className="brand"><CircleDollarSign size={20} className="brand-icon" /><span>FUNDED<span className="brand-dot">.</span></span></div>
+          <button className="icon-btn" onClick={() => setMobileOpen(false)} aria-label="Fermer"><X size={18} /></button>
+        </div>
+
+        <nav className="drawer-nav">
+          {items.map((it) => (
+            <button key={it.id} aria-current={tab === it.id ? "page" : undefined}
+              className={"nav-item" + (tab === it.id ? " active" : "")} onClick={() => setTab(it.id)}>
+              <it.icon size={17} /><span>{it.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* ===== Sidebar desktop (masquée en <= 860px par les styles) ===== */}
       <aside className={"sidebar" + (collapsed ? " collapsed" : "")}>
         <div className="sidebar-top">
           <div className="brand">
@@ -346,6 +427,7 @@ export function Sidebar({ tab, setTab, session, onOpenSettings, onOpenProfile, o
         <nav className="nav">
           {items.map((it) => (
             <button key={it.id} title={collapsed ? it.label : undefined}
+              aria-current={tab === it.id ? "page" : undefined}
               className={"nav-item" + (tab === it.id ? " active" : "")} onClick={() => setTab(it.id)}>
               <it.icon size={17} />{!collapsed && <span>{it.label}</span>}
             </button>
@@ -365,14 +447,16 @@ export function Sidebar({ tab, setTab, session, onOpenSettings, onOpenProfile, o
             />
           )}
         </div>
-
-        {showLogoutConfirm && (
-          <LogoutConfirm
-            onCancel={() => setShowLogoutConfirm(false)}
-            onConfirm={() => { setShowLogoutConfirm(false); onSignOut(); }}
-          />
-        )}
       </aside>
+
+      {/* Hors de la sidebar : la modale doit rester visible sur mobile,
+          où la sidebar desktop est display:none. */}
+      {showLogoutConfirm && (
+        <LogoutConfirm
+          onCancel={() => setShowLogoutConfirm(false)}
+          onConfirm={() => { setShowLogoutConfirm(false); onSignOut(); }}
+        />
+      )}
     </>
   );
 }

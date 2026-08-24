@@ -1,7 +1,17 @@
 import React from "react";
-import { X, Building2, TrendingUp, KeyRound, History, Wallet, Receipt } from "lucide-react";
+import { X, Building2, TrendingUp, KeyRound, History, Wallet, Receipt, Copy, CheckCircle2 } from "lucide-react";
 import { fmt, fmtSigned, daysUntil, addMonths, todayStr, nextPayoutDate } from "../utils/format";
-import { AccountStatus, ChallengeTag, AssetTag } from "./ui";
+import { toast } from "./Toast";
+import { AccountStatus, ChallengeTag, AssetTag, PhaseBadge } from "./ui";
+
+const FREQ_LABELS = {
+  weekly: "Hebdomadaire",
+  bi_weekly: "Toutes les 2 semaines",
+  monthly: "Mensuelle",
+  on_demand: "À la demande",
+  other: "Autre",
+};
+const freqLabel = (f) => FREQ_LABELS[f] || f || "—";
 
 export default function AccountDetails({ account: a, firm, payoutsForAccount, expensesForAccount, scalingHistory, onClose, onEdit }) {
   if (!a) return null;
@@ -30,6 +40,14 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
     : totalInvested > 0 && totalPayouts >= totalInvested;
   const roi = totalInvested > 0 ? Math.round((net / totalInvested) * 1000) / 10 : null;
 
+  // --- Drawdown global : barre de consommation de la limite ---
+  const ddCur = a.current_drawdown_pct != null && a.current_drawdown_pct !== "" ? Number(a.current_drawdown_pct) : null;
+  const ddMax = a.max_drawdown_limit_pct ? Number(a.max_drawdown_limit_pct) : null;
+  const ddRatio = ddCur != null && ddMax ? Math.min(1, Math.max(0, ddCur / ddMax)) : null;
+
+  const copyValue = (text, label) =>
+    navigator.clipboard?.writeText(text).then(() => toast.success(`${label} copié`)).catch(() => {});
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
@@ -41,35 +59,44 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
         </div>
 
         <div className="tag-row" style={{ marginBottom: 14 }}>
+          <PhaseBadge phase={a.phase} />
           <ChallengeTag challengeType={a.challenge_type} />
           <AssetTag assetClass={a.asset_class} />
           {a.payout_split_pct > 0 && <span className="tag" style={{ "--c": "#35D28A" }}>{a.payout_split_pct}% split</span>}
         </div>
 
-        <div className="panel" style={{ marginBottom: 14 }}>
-          <AccountStatus challengeType={a.challenge_type} phase={a.phase} />
-        </div>
+        {a.phase !== "funded" && (
+          <div className="panel" style={{ marginBottom: 14 }}>
+            <AccountStatus challengeType={a.challenge_type} phase={a.phase} />
+          </div>
+        )}
 
         {/* Rentabilité — la partie la plus demandée */}
         <div className="panel" style={{ marginBottom: 14 }}>
           <div className="settings-label"><Wallet size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Rentabilité</div>
-          <div className="stat-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          {(refundThreshold || totalInvested > 0) && reimbursed && (
+            <div className="reimbursed-banner" style={{ marginBottom: 10 }}>
+              <CheckCircle2 size={15} />
+              {refundThreshold
+                ? `Frais remboursés (${payoutsForAccount.length}/${refundThreshold} payouts reçus)`
+                : "Coût total remboursé par les payouts"}
+            </div>
+          )}
+          <div className="stat-grid compact">
             <MiniStat label="Investi au total" value={fmt(totalInvested)} />
             <MiniStat label="Payouts reçus" value={fmt(totalPayouts)} accent="var(--profit)" />
             <MiniStat label="Net" value={fmtSigned(net)} accent={net >= 0 ? "var(--profit)" : "var(--loss)"} />
             <MiniStat label="ROI" value={roi != null ? `${roi >= 0 ? "+" : ""}${roi}%` : "—"} accent={roi != null ? (roi >= 0 ? "var(--profit)" : "var(--loss)") : undefined} />
           </div>
-          <p className="empty-sub" style={{ marginTop: 10, marginBottom: 0 }}>
-            {refundThreshold
-              ? (reimbursed
-                  ? `Frais remboursés (${payoutsForAccount.length}/${refundThreshold} payouts reçus).`
-                  : `${payoutsForAccount.length}/${refundThreshold} payouts reçus avant remboursement des frais.`)
-              : totalInvested === 0
-                ? "Aucun coût enregistré pour ce compte."
-                : reimbursed
-                  ? `Frais d'achat entièrement remboursés, +${fmt(net)} de gain net.`
+          {!reimbursed && (
+            <p className="empty-sub" style={{ marginTop: 10, marginBottom: 0 }}>
+              {refundThreshold
+                ? `${payoutsForAccount.length}/${refundThreshold} payouts reçus avant remboursement des frais.`
+                : totalInvested === 0
+                  ? "Aucun coût enregistré pour ce compte."
                   : `Reste ${fmt(totalInvested - totalPayouts)} à récupérer pour rembourser le coût initial.`}
-          </p>
+            </p>
+          )}
         </div>
 
         <div className="settings-grid" style={{ marginBottom: 14 }}>
@@ -81,7 +108,15 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
               <Row label="Coût d'achat" value={fmt(a.cost || 0)} />
               <Row label="Date d'achat" value={a.purchase_date || "—"} />
               {a.challenge_deadline && (
-                <Row label="Deadline challenge" value={`${a.challenge_deadline}${dLeft != null ? ` (${dLeft >= 0 ? dLeft + "j restants" : "dépassée"})` : ""}`} />
+                <Row
+                  label="Deadline challenge"
+                  value={
+                    <span className={dLeft != null ? (dLeft < 0 ? "val-bad" : dLeft <= 7 ? "val-warn" : "") : ""}>
+                      {a.challenge_deadline}
+                      {dLeft != null ? ` (${dLeft >= 0 ? `${dLeft}j restants` : "dépassée"})` : ""}
+                    </span>
+                  }
+                />
               )}
               {a.trading_start_date && <Row label="1er trade (financé)" value={a.trading_start_date} />}
             </div>
@@ -91,7 +126,17 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
             <div className="settings-label">Risque</div>
             <div className="bar-list">
               <Row label="Drawdown quotidien max" value={a.daily_drawdown_limit_pct ? `${a.daily_drawdown_limit_pct}%` : "—"} />
-              <Row label="Drawdown global max" value={a.max_drawdown_limit_pct ? `${a.max_drawdown_limit_pct}%` : "—"} />
+              <div className="bar-list-top">
+                <span className="bar-list-label">Drawdown global utilisé</span>
+                <span className={"bar-list-value" + (ddRatio >= 1 ? " val-bad" : ddRatio >= .7 ? " val-warn" : "")}>
+                  {ddCur != null && ddMax ? `${ddCur}% / ${ddMax}%` : ddMax ? `limite ${ddMax}%` : "—"}
+                </span>
+              </div>
+              {ddRatio != null && (
+                <div className="firm-bar small">
+                  <div className={"firm-bar-fill" + (ddRatio >= 1 ? " over" : "")} style={{ width: `${ddRatio * 100}%` }} />
+                </div>
+              )}
             </div>
           </div>
 
@@ -99,16 +144,19 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
             <div className="settings-label">Payout</div>
             <div className="bar-list">
               <Row label="Split" value={a.payout_split_pct ? `${a.payout_split_pct}%` : "—"} />
-              <Row label="Fréquence" value={a.payout_frequency || "—"} />
-              <Row label="Total reçu" value={fmt(totalPayouts)} />
+              <Row label="Fréquence" value={freqLabel(a.payout_frequency)} />
+              <Row label="Total reçu" value={<span className="val-good">{fmt(totalPayouts)}</span>} />
               <Row label="Nombre de payouts" value={payoutsForAccount.length} />
               {a.phase === "funded" && (
                 <Row
                   label="Prochain payout"
                   value={
-                    nextPayout
-                      ? `${nextPayout}${payoutDLeft === 0 ? " (aujourd'hui)" : payoutDLeft === 1 ? " (demain)" : payoutDLeft > 1 ? ` (dans ${payoutDLeft}j)` : ""}`
-                      : (a.trading_start_date ? "Payout reçu — relance un trade" : "Aucun trade lancé")
+                    nextPayout ? (
+                      <span className={payoutDLeft === 0 || payoutDLeft === 1 ? "val-good" : ""}>
+                        {nextPayout}
+                        {payoutDLeft === 0 ? " (aujourd'hui)" : payoutDLeft === 1 ? " (demain)" : payoutDLeft > 1 ? ` (dans ${payoutDLeft}j)` : ""}
+                      </span>
+                    ) : (a.trading_start_date ? "Payout reçu — relance un trade" : "Aucun trade lancé")
                   }
                 />
               )}
@@ -121,7 +169,17 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
               <div className="bar-list">
                 <Row label="Augmentation" value={`${a.scaling_pct}% tous les ${a.scaling_interval_months} mois`} />
                 <Row label="Dernier scaling" value={a.last_scale_date || "Jamais"} />
-                <Row label="Prochain scaling" value={nextScale ? `${nextScale}${scaleDue ? " (disponible)" : ""}` : "—"} />
+                <Row
+                  label="Prochain scaling"
+                  value={
+                    nextScale ? (
+                      <>
+                        {nextScale}
+                        {scaleDue && <> <span className="val-good">(disponible)</span></>}
+                      </>
+                    ) : "—"
+                  }
+                />
               </div>
             ) : (
               <div className="empty-sub">Pas de plan de scaling sur ce compte.</div>
@@ -133,9 +191,19 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
           <div className="panel" style={{ marginBottom: 14 }}>
             <div className="settings-label"><KeyRound size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Identifiants</div>
             <div className="bar-list">
-              <Row label="Login" value={a.login || "—"} />
-              <Row label="Plateforme" value={a.platform || "—"} />
-              <Row label="Serveur" value={a.server || "—"} />
+              {a.login && (
+                <Row
+                  label="Login"
+                  value={<>{a.login}<button className="row-copy" title="Copier le login" aria-label="Copier le login" onClick={() => copyValue(a.login, "Login")}><Copy size={12} /></button></>}
+                />
+              )}
+              {a.platform && <Row label="Plateforme" value={a.platform} />}
+              {a.server && (
+                <Row
+                  label="Serveur"
+                  value={<>{a.server}<button className="row-copy" title="Copier le serveur" aria-label="Copier le serveur" onClick={() => copyValue(a.server, "Serveur")}><Copy size={12} /></button></>}
+                />
+              )}
             </div>
             <p className="empty-sub" style={{ marginTop: 8 }}>Le mot de passe reste chiffré — révèle-le depuis la carte du compte (cadenas).</p>
           </div>
@@ -149,9 +217,10 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
                 <thead><tr><th>Date</th><th>Description</th><th className="num">Montant</th></tr></thead>
                 <tbody>
                   {[...otherExpenses].sort((x, y) => (x.date < y.date ? 1 : -1)).map((e) => (
-                    <tr key={e.id}><td>{e.date}</td><td className="dim">{e.description}</td><td className="num">{fmt(e.amount)}</td></tr>
+                    <tr key={e.id}><td>{e.date}</td><td className="dim ellipsis-cell" title={e.description}>{e.description}</td><td className="num">{fmt(e.amount)}</td></tr>
                   ))}
                 </tbody>
+                <tfoot><tr><td>Total</td><td /><td className="num">{fmt(otherExpensesTotal)}</td></tr></tfoot>
               </table>
             </div>
           </div>
@@ -165,9 +234,10 @@ export default function AccountDetails({ account: a, firm, payoutsForAccount, ex
                 <thead><tr><th>Date</th><th className="num">Montant</th></tr></thead>
                 <tbody>
                   {[...payoutsForAccount].sort((x, y) => (x.date < y.date ? 1 : -1)).map((p) => (
-                    <tr key={p.id}><td>{p.date}</td><td className="num">{fmt(p.amount)}</td></tr>
+                    <tr key={p.id}><td>{p.date}</td><td className="num val-good">{fmt(p.amount)}</td></tr>
                   ))}
                 </tbody>
+                <tfoot><tr><td>Total</td><td className="num">{fmt(totalPayouts)}</td></tr></tfoot>
               </table>
             </div>
           </div>

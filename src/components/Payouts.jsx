@@ -176,8 +176,8 @@ export default function Payouts({ payouts, accounts, firms, reload }) {
                 {filteredPayouts.map((p) => (
                   <tr key={p.id}>
                     <td className="dim" data-label="Date">{p.date}</td>
-                    <td className="ellipsis-cell" data-label="Compte">{accLabel(p.account_id)}</td>
-                    <td className="dim ellipsis-cell" data-label="Note">{p.notes || "—"}</td>
+                    <td className="ellipsis-cell" data-label="Compte" title={accLabel(p.account_id)}>{accLabel(p.account_id)}</td>
+                    <td className="dim ellipsis-cell" data-label="Note" title={p.notes || undefined}>{p.notes || "—"}</td>
                     <td className="num" data-label="Montant" style={{ color: "var(--profit)" }}>+{fmt(p.amount)}</td>
                     <td data-label="">
                       <div className="row-actions">

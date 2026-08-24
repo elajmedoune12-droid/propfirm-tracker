@@ -123,9 +123,9 @@ export default function Expenses({ expenses, accounts, firms, reload }) {
                 {filteredExpenses.map((e) => (
                   <tr key={e.id}>
                     <td className="dim" data-label="Date">{e.date}</td>
-                    <td className="ellipsis-cell" data-label="Description">{e.description || "—"}</td>
+                    <td className="ellipsis-cell" data-label="Description" title={e.description || undefined}>{e.description || "—"}</td>
                     <td data-label="Catégorie"><span className="tag" style={{ "--c": "#8891A3" }}>{e.category}</span></td>
-                    <td className="dim ellipsis-cell" data-label="Compte">{accLabel(e.account_id)}</td>
+                    <td className="dim ellipsis-cell" data-label="Compte" title={accLabel(e.account_id)}>{accLabel(e.account_id)}</td>
                     <td className="num" data-label="Montant" style={{ color: "var(--loss)" }}>-{fmt(e.amount)}</td>
                     <td data-label="">
                       <div className="row-actions">

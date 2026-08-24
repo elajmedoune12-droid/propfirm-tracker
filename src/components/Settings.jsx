@@ -5,9 +5,9 @@ import {
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { PageHeader } from "./ui";
-import { enablePushNotifications } from "../lib/push";
+import { enablePushNotifications, disablePushNotifications, isPushEnabledOnThisDevice } from "../lib/push";
 
-function profileInfo(session) {
+export function profileInfo(session) {
   const meta = session?.user?.user_metadata || {};
   return {
     name: meta.full_name?.trim() || "",
@@ -24,7 +24,7 @@ function initials({ name, email }) {
   return (email || "").slice(0, 2).toUpperCase();
 }
 
-function AvatarGlyph({ info, size = "" }) {
+export function AvatarGlyph({ info, size = "" }) {
   if (info.avatarUrl) {
     return <img src={info.avatarUrl} alt="avatar" className={"avatar avatar-img " + size} />;
   }
@@ -242,10 +242,9 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
   const [pushErr, setPushErr] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
 
+  // État réel : un abonnement push actif existe-t-il sur CET appareil ?
   useEffect(() => {
-    if (typeof Notification !== "undefined") {
-      setPushEnabled(Notification.permission === "granted");
-    }
+    isPushEnabledOnThisDevice().then(setPushEnabled);
   }, []);
 
   const handleEnablePush = async () => {
@@ -256,6 +255,19 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
       setPushMsg("Notifications activées sur cet appareil.");
     } catch (err) {
       setPushErr(err.message || "Impossible d'activer les notifications.");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleDisablePush = async () => {
+    setPushBusy(true); setPushErr(""); setPushMsg("");
+    try {
+      await disablePushNotifications();
+      setPushEnabled(false);
+      setPushMsg("Notifications désactivées sur cet appareil.");
+    } catch (err) {
+      setPushErr(err.message || "Impossible de désactiver les notifications.");
     } finally {
       setPushBusy(false);
     }
@@ -418,9 +430,14 @@ export function SettingsPage({ session, theme, onToggleTheme, onMfaChange }) {
                 {pushBusy ? <Loader2 size={14} className="spin" /> : <Bell size={13} />} Activer
               </button>
             ) : (
-              <button className="btn ghost small" onClick={sendTestPush} disabled={pushBusy}>
-                {pushBusy ? <Loader2 size={14} className="spin" /> : <Bell size={13} />} Envoyer une notification test
-              </button>
+              <>
+                <button className="btn ghost small" onClick={sendTestPush} disabled={pushBusy}>
+                  {pushBusy ? <Loader2 size={14} className="spin" /> : <Bell size={13} />} Notification test
+                </button>
+                <button className="btn ghost small danger-text" onClick={handleDisablePush} disabled={pushBusy}>
+                  Désactiver
+                </button>
+              </>
             )}
           </div>
           {pushErr && <div className="pin-error">{pushErr}</div>}

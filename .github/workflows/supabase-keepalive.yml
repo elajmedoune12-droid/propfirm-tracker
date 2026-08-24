@@ -1,0 +1,32 @@
+# Supabase (free tier) met en pause un projet sans requete pendant 7 jours.
+# Ce workflow pinge l'API REST une fois par jour pour garder le projet actif,
+# meme si personne n'ouvre l'application.
+#
+# Secrets requis (Settings > Secrets and variables > Actions) :
+#   SUPABASE_URL      ex: https://xxxxxxxxxxxx.supabase.co
+#   SUPABASE_ANON_KEY cle anon publique du projet
+
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # tous les jours a 06:00 UTC
+  workflow_dispatch: # permet aussi un declenchement manuel
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST
+        run: |
+          # Une vraie requête sur une table (comme l'app) : la racine /rest/v1/
+          # rejette les requêtes key-only avec un 401.
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/firms?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "HTTP $http_code"
+          if [ "$http_code" != "200" ]; then
+            echo "::warning::Supabase a repondu HTTP $http_code (le projet est peut-etre en pause)."
+            exit 1
+          fi

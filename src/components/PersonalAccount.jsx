@@ -2,7 +2,10 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Wallet, Target, TrendingUp, AlertTriangle, Plus, Trash2, CheckCircle2, Loader2, Flag, ChevronDown, Pencil, Settings as SettingsIcon } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fmt, fmtSigned } from "../utils/format";
-import { StatCard, Dial, PageHeader, FieldRow, EmptyState } from "./ui";
+import { StatCard, Dial, PageHeader, EmptyState } from "./ui";
+import { usePageVisible } from "./PageTransition";
+import { LoadError } from "./Loading";
+import { toast } from "./Toast";
 import * as api from "../lib/api";
 
 export default function PersonalAccount() {
@@ -10,22 +13,34 @@ export default function PersonalAccount() {
   const [history, setHistory] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadErr, setLoadErr] = useState(false);
 
   const reload = async () => {
-    const [acc, hist, ms] = await Promise.all([
-      api.getPersonalAccount(),
-      api.listBalanceHistory(),
-      api.listMilestones(),
-    ]);
-    setAccount(acc || null);
-    setHistory(hist);
-    setMilestones(ms);
-    setLoaded(true);
+    try {
+      const [acc, hist, ms] = await Promise.all([
+        api.getPersonalAccount(),
+        api.listBalanceHistory(),
+        api.listMilestones(),
+      ]);
+      setAccount(acc || null);
+      setHistory(hist);
+      setMilestones(ms);
+    } catch {
+      // Coupure réseau : on garde l'état courant et on affiche une erreur
+      // explicite seulement si rien n'a encore pu être chargé.
+      setLoadErr(true);
+      toast.error("Impossible de charger le compte propre");
+    } finally {
+      setLoaded(true);
+    }
   };
+
+  const retry = () => { setLoadErr(false); setLoaded(false); reload(); };
 
   useEffect(() => { reload(); }, []);
 
   if (!loaded) return <div className="loading-screen">Chargement…</div>;
+  if (loadErr && account === undefined) return <div className="app-root"><LoadError onRetry={retry} /></div>;
   if (!account) return <SetupForm onDone={reload} />;
 
   return <AccountView account={account} history={history} milestones={milestones} reload={reload} />;
@@ -102,56 +117,9 @@ function recomputeChain(history, startingBalance) {
   return { recalculated, finalBalance: equity, peakBalance: peak };
 }
 
-/* Regroupe l'historique par mois calendaire, avec le solde de départ de
-   chaque mois (pour calculer l'objectif en $ propre à ce mois précis),
-   puis regroupe ces mois par année pour un résumé annuel. */
-function computeMonthlyStats(history, startingBalance, monthlyTargetPct) {
-  const sorted = [...history].sort((a, b) => (a.entry_date < b.entry_date ? -1 : 1));
-  let equity = Number(startingBalance);
-  const byMonth = {};
-
-  for (const h of sorted) {
-    const ym = h.entry_date.slice(0, 7); // "2026-07"
-    if (!byMonth[ym]) byMonth[ym] = { ym, startBalance: equity, profit: 0, deposits: 0 };
-    byMonth[ym].profit += Number(h.weekly_pnl || 0);
-    byMonth[ym].deposits += Number(h.deposit_amount || 0);
-    equity += Number(h.weekly_pnl || 0) + Number(h.deposit_amount || 0);
-  }
-
-  const months = Object.values(byMonth)
-    .map((m) => {
-      const targetAmount = monthlyTargetPct > 0 ? (m.startBalance * monthlyTargetPct) / 100 : 0;
-      return {
-        ...m,
-        targetAmount,
-        hit: monthlyTargetPct > 0 ? m.profit >= targetAmount : null,
-      };
-    })
-    .sort((a, b) => (a.ym < b.ym ? 1 : -1)); // plus récent d'abord
-
-  const byYear = {};
-  for (const m of months) {
-    const year = m.ym.slice(0, 4);
-    if (!byYear[year]) byYear[year] = { year, months: [], totalProfit: 0, hitCount: 0, trackedCount: 0 };
-    byYear[year].months.push(m);
-    byYear[year].totalProfit += m.profit;
-    if (m.hit !== null) {
-      byYear[year].trackedCount += 1;
-      if (m.hit) byYear[year].hitCount += 1;
-    }
-  }
-
-  return Object.values(byYear).sort((a, b) => (a.year < b.year ? 1 : -1));
-}
-
-const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
-function monthLabel(ym) {
-  const [y, m] = ym.split("-");
-  return `${MONTH_LABELS[Number(m) - 1]} ${y}`;
-}
-
 /* --- Vue principale une fois configuré --- */
 function AccountView({ account, history, milestones, reload }) {
+  const pageVisible = usePageVisible();
   const [showAddWeek, setShowAddWeek] = useState(false);
   const [showAddMilestone, setShowAddMilestone] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -253,18 +221,23 @@ function AccountView({ account, history, milestones, reload }) {
           <div className="panel-header">Évolution du solde</div>
           {chartData.length > 1 ? (
             <div className="chart-box">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="date" stroke="var(--text-faint)" fontSize={11} />
-                  <YAxis stroke="var(--text-faint)" fontSize={11} tickFormatter={(v) => fmt(v)} width={70} />
-                  <Tooltip
-                    contentStyle={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                    formatter={(v) => fmt(v)}
-                  />
-                  <Line type="monotone" dataKey="balance" stroke="var(--gold)" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              {pageVisible ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="date" stroke="var(--text-faint)" fontSize={11} />
+                    <YAxis stroke="var(--text-faint)" fontSize={11} tickFormatter={(v) => fmt(v)} width={70} />
+                    <Tooltip
+                      contentStyle={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                      formatter={(v) => fmt(v)}
+                    />
+                    <Line type="monotone" dataKey="balance" stroke="var(--gold)" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                // Page masquée : pas de ResponsiveContainer (mesure 0×0 sinon).
+                <div className="chart-loading skeleton-pulse" />
+              )}
             </div>
           ) : (
             <EmptyState icon={Wallet} title="Pas encore assez de données" sub="Ajoute quelques semaines pour voir la courbe." />
@@ -388,56 +361,6 @@ function MilestoneList({ milestones, currentBalance, reload }) {
    défaut (les plus récentes), avec un bouton pour en révéler davantage.
    Chaque ligne a maintenant son propre bouton "Modifier". */
 const PAGE_SIZE = 8;
-
-function MonthlyPerformancePanel({ history, account }) {
-  const years = useMemo(
-    () => computeMonthlyStats(history, account.starting_balance, account.monthly_target),
-    [history, account.starting_balance, account.monthly_target]
-  );
-
-  if (years.length === 0) {
-    return (
-      <div className="panel">
-        <div className="panel-header">Performance mensuelle</div>
-        <EmptyState icon={Target} title="Pas encore de données" sub="Ajoute quelques semaines pour voir ta performance mois par mois." />
-      </div>
-    );
-  }
-
-  return (
-    <div className="panel">
-      <div className="panel-header">Performance mensuelle</div>
-      <div className="tab-content" style={{ gap: 18 }}>
-        {years.map((y) => (
-          <div key={y.year}>
-            <div className="bar-list-top" style={{ marginBottom: 8 }}>
-              <span className="bar-list-label" style={{ fontWeight: 700, fontSize: 13 }}>{y.year}</span>
-              <span className="bar-list-value">
-                {fmtSigned(y.totalProfit)}
-                {y.trackedCount > 0 && ` — ${y.hitCount}/${y.trackedCount} mois réussis`}
-              </span>
-            </div>
-            <div className="bar-list">
-              {y.months.map((m) => (
-                <div key={m.ym} className="scaling-row" style={{ justifyContent: "space-between" }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {m.hit === true && <CheckCircle2 size={14} color="var(--profit)" />}
-                    {m.hit === false && <AlertTriangle size={14} color="var(--loss)" />}
-                    {monthLabel(m.ym)}
-                  </span>
-                  <span className="num" style={{ color: m.profit >= 0 ? "var(--profit)" : "var(--loss)" }}>
-                    {fmtSigned(m.profit)}
-                    {m.targetAmount > 0 && <span className="dim" style={{ marginLeft: 6, fontWeight: 400 }}>/ {fmt(m.targetAmount)}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function BalanceHistoryTable({ history, reload, onEdit }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);

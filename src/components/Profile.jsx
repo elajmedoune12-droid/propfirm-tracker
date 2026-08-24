@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import {
-  Camera, Check, AlertCircle, Loader2, CalendarDays, Building2,
-  Wallet, TrendingUp, ShieldCheck, ShieldOff, SlidersHorizontal,
+  Camera, Check, AlertCircle, Loader2, CalendarDays,
+  ShieldCheck, ShieldOff, SlidersHorizontal,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { fmt } from "../utils/format";

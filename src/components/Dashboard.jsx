@@ -1,11 +1,13 @@
-import React, { useMemo } from "react";
+import React, { useMemo, lazy, Suspense } from "react";
+import { usePageVisible } from "./PageTransition";
 import { Receipt, Wallet, Target, TrendingUp, CircleDollarSign, ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from "recharts";
 import { fmt, fmtSigned } from "../utils/format";
 import { accountsAsOfYear } from "../utils/accountHistory";
 import { StatCard, Dial, TrancheStrip, TrancheBuilder, EmptyState, PageHeader, BarList, PHASES } from "./ui";
+
+// recharts (~400 ko) est sorti du bundle principal : le graphique se charge
+// en tâche de fond pendant que les stats s'affichent.
+const MonthlyChart = lazy(() => import("./MonthlyChart"));
 
 const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
@@ -26,7 +28,7 @@ function YearSwitcher({ year, onChange }) {
 // dans App.jsx), donc un état local reviendrait à l'année du jour à chaque retour
 // sur l'onglet. En le faisant vivre dans App.jsx, qui ne se démonte jamais, l'année
 // choisie reste mémorisée tant que l'appli reste ouverte.
-export default function Dashboard({ accounts, expenses, payouts, goalTranches, currentYear, saveGoalTranches, accountLabel, firms = [], accountEvents = [], scalingHistory = [], selectedYear, onChangeYear }) {
+export default function Dashboard({ accounts, expenses, payouts, goalTranches, saveGoalTranches, accountLabel, firms = [], accountEvents = [], scalingHistory = [], selectedYear, onChangeYear }) {
   const yearOf = (d) => Number((d || "").slice(0, 4)) || selectedYear;
 
   // Comptes tels qu'ils étaient au 31/12 de l'année sélectionnée (phase + taille à
@@ -58,6 +60,7 @@ export default function Dashboard({ accounts, expenses, payouts, goalTranches, c
   const yearTranches = goalTranches.filter((g) => g.year === selectedYear);
   const goalTarget = yearTranches.reduce((s, t) => s + t.size * t.count, 0);
 
+  const pageVisible = usePageVisible();
   const monthlyChartData = useMemo(() => MONTHS_FR.map((m, idx) => {
     const exp = expenses.filter((e) => yearOf(e.date) === selectedYear && Number((e.date || "").slice(5, 7)) - 1 === idx).reduce((s, e) => s + Number(e.amount), 0);
     const pay = payouts.filter((p) => yearOf(p.date) === selectedYear && Number((p.date || "").slice(5, 7)) - 1 === idx).reduce((s, p) => s + Number(p.amount), 0);
@@ -108,37 +111,15 @@ export default function Dashboard({ accounts, expenses, payouts, goalTranches, c
         <div className="panel">
           <div className="panel-header"><span>Dépenses vs Payouts — {selectedYear}</span></div>
           <div className="chart-box">
-            <ResponsiveContainer>
-              <ComposedChart data={monthlyChartData} barGap={3} margin={{ left: -18, top: 6 }}>
-                <defs>
-                  <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#F2496B" stopOpacity={0.95} />
-                    <stop offset="100%" stopColor="#F2496B" stopOpacity={0.55} />
-                  </linearGradient>
-                  <linearGradient id="gradPayout" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#35D28A" stopOpacity={0.95} />
-                    <stop offset="100%" stopColor="#35D28A" stopOpacity={0.55} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E2434" vertical={false} />
-                <XAxis dataKey="month" stroke="#5B6478" fontSize={11} tickLine={false} axisLine={{ stroke: "#232937" }} />
-                <YAxis stroke="#5B6478" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                  contentStyle={{ background: "#171C27", border: "1px solid #242B3A", borderRadius: 8, fontSize: 12 }}
-                  labelStyle={{ color: "#E7EAF0", marginBottom: 4, fontWeight: 600 }}
-                  formatter={(v) => fmt(v)}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Dépenses" fill="url(#gradExpense)" radius={[4, 4, 0, 0]} maxBarSize={26} />
-                <Bar dataKey="Payouts" fill="url(#gradPayout)" radius={[4, 4, 0, 0]} maxBarSize={26} />
-                <Line
-                  type="monotone" dataKey="Net" stroke="#F7B731" strokeWidth={2.25}
-                  dot={{ r: 3, fill: "#F7B731", strokeWidth: 0 }}
-                  activeDot={{ r: 5, fill: "#F7B731", stroke: "#171C27", strokeWidth: 2 }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            {pageVisible ? (
+              <Suspense fallback={<div className="chart-loading skeleton-pulse" />}>
+                <MonthlyChart data={monthlyChartData} />
+              </Suspense>
+            ) : (
+              // Page masquée (display:none) : on ne monte pas le graphique,
+              // sinon recharts mesure 0×0 et logge des warnings en boucle.
+              <div className="chart-loading skeleton-pulse" />
+            )}
           </div>
         </div>
 
@@ -175,17 +156,21 @@ export default function Dashboard({ accounts, expenses, payouts, goalTranches, c
         {recentActivity.length === 0 ? (
           <EmptyState icon={Receipt} title="Aucune activité" sub="Ajoute une dépense ou un payout pour commencer." />
         ) : (
-          <div className="table-wrap">
-            <table className="table"><tbody>
-              {recentActivity.map((a) => (
-                <tr key={a.id}>
-                  <td className="dim">{a.date}</td>
-                  <td>{a.kind === "payout" ? <span className="tag" style={{ "--c": "#35D28A" }}>Payout</span> : <span className="tag" style={{ "--c": "#F2496B" }}>Dépense</span>}</td>
-                  <td className="ellipsis-cell">{a.kind === "payout" ? accountLabel(a.account_id) : a.description || a.category}</td>
-                  <td className="num" style={{ color: a.kind === "payout" ? "#35D28A" : "#F2496B" }}>{a.kind === "payout" ? "+" : "-"}{fmt(a.amount)}</td>
-                </tr>
-              ))}
-            </tbody></table>
+          <div className="act-list">
+            {recentActivity.map((a) => {
+              const isPay = a.kind === "payout";
+              const Icon = isPay ? CircleDollarSign : Receipt;
+              return (
+                <div className="act-row" key={a.id}>
+                  <span className={"act-icon " + (isPay ? "pay" : "exp")}><Icon size={13} /></span>
+                  <div className="act-main">
+                    <div className="act-title">{isPay ? accountLabel(a.account_id) : (a.description || a.category)}</div>
+                    <div className="act-sub">{a.date} · {isPay ? "Payout" : (a.category || "Dépense")}</div>
+                  </div>
+                  <span className={"act-amt " + (isPay ? "good" : "bad")}>{isPay ? "+" : "-"}{fmt(a.amount)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

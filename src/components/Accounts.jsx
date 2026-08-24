@@ -4,7 +4,7 @@ import {
   Building2, Plus, Trash2, Pencil, Zap, KeyRound, ChevronDown, ChevronUp, Eye, EyeOff,
   Lock, Unlock, AlertTriangle, Clock, History, Search, X as XIcon, ArrowRight, SlidersHorizontal, CalendarClock,
 } from "lucide-react";
-import { fmt, todayStr, addMonths, daysUntil, timeAgo, nextPayoutDate } from "../utils/format";
+import { fmt, todayStr, addMonths, daysUntil, nextPayoutDate } from "../utils/format";
 import * as api from "../lib/api";
 import {
   PHASES, phaseInfo, phasesForChallenge, PLATFORMS, FieldRow, EmptyState, PageHeader,
@@ -66,7 +66,7 @@ function BreachReasonModal({ onClose, onSubmit }) {
   );
 }
 
-export default function Accounts({ accounts, firms, payouts, expenses, reload }) {
+export default function Accounts({ accounts, firms, payouts, reload }) {
   const [showForm, setShowForm] = useState(false);
   const blank = {
     firm_id: "", size: "", cost: "", phase: "phase1", purchase_date: todayStr(), challenge_deadline: "",
@@ -474,7 +474,6 @@ export default function Accounts({ accounts, firms, payouts, expenses, reload })
             const nextScale = a.scaling_enabled ? addMonths(a.last_scale_date || a.purchase_date, a.scaling_interval_months) : null;
             const scaleDue = nextScale && nextScale <= todayStr();
             const dLeft = a.challenge_deadline ? daysUntil(a.challenge_deadline) : null;
-            const ddRatio = a.max_drawdown_limit_pct > 0 ? (a.current_drawdown_pct || 0) / a.max_drawdown_limit_pct : 0;
             const expanded = expandedId === a.id;
             const history = historyByAccount[a.id] || [];
             const revealedPwd = pendingPasswords[a.id];

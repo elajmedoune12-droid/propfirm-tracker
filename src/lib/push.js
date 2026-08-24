@@ -34,3 +34,29 @@ export async function enablePushNotifications() {
 
   return true;
 }
+
+/* Désactive les push sur cet appareil : désabonnement navigateur +
+   suppression de la ligne côté base. */
+export async function disablePushNotifications() {
+  if (!("serviceWorker" in navigator)) return false;
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+  const endpoint = subscription.endpoint;
+  try { await subscription.unsubscribe(); } catch { /* déjà invalide côté navigateur */ }
+  const { error } = await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+  if (error) console.warn("Suppression de l'abonnement côté serveur impossible :", error.message);
+  return true;
+}
+
+/* État réel de CET appareil (et non la simple permission du navigateur) :
+   un abonnement push actif existe-t-il ici ? */
+export async function isPushEnabledOnThisDevice() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+    const registration = await navigator.serviceWorker.ready;
+    return Boolean(await registration.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}

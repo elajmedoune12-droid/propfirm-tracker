@@ -1,7 +1,13 @@
 import { supabase } from "../supabaseClient";
+import { toast } from "../components/Toast";
 
 function check(error) {
-  if (error) throw error;
+  if (error) {
+    // Les échecs d'écriture/lecture étaient silencieux côté UI (chaque page
+    // catchait sans rien afficher) : on remonte maintenant un toast.
+    toast.error(`Erreur : ${error.message || "une erreur est survenue"}`);
+    throw error;
+  }
 }
 
 /* ---------------- Firms ---------------- */
