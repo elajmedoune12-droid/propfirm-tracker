@@ -167,8 +167,8 @@ export function useNotifState(items) {
 
   const allIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
 
-  useEffect(() => { persistIds(READ_KEY, readIds, allIds); }, [readIds, allIds]);
-  useEffect(() => { persistIds(DEL_KEY, deletedIds, allIds); }, [deletedIds, allIds]);
+  useEffect(() => { if (allIds.size > 0) persistIds(READ_KEY, readIds, allIds); }, [readIds, allIds]);
+  useEffect(() => { if (allIds.size > 0) persistIds(DEL_KEY, deletedIds, allIds); }, [deletedIds, allIds]);
 
   const visibleItems = useMemo(
     () => items.filter((i) => !deletedIds.has(i.id)),
