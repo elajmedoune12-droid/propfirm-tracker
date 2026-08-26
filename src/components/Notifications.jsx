@@ -136,26 +136,53 @@ const loadIds = (key) => {
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
-// Nettoyage : on ne garde que les ids encore susceptibles de réapparaître
-// (une sortie de fenêtre est définitive pour un payout / évènement daté).
-function persistIds(key, set, validIds) {
+function persistIds(key, set) {
   try {
-    localStorage.setItem(key, JSON.stringify([...set].filter((id) => validIds.has(id))));
+    localStorage.setItem(key, JSON.stringify([...set]));
   } catch { /* stockage indisponible */ }
-  window.dispatchEvent(new Event(SYNC_EVENT));
 }
 
 export function useNotifState(items) {
   const [readIds, setReadIds] = useState(() => loadIds(READ_KEY));
   const [deletedIds, setDeletedIds] = useState(() => loadIds(DEL_KEY));
 
+  // Recharger depuis localStorage à chaque changement (écrase les stale reads)
+  useEffect(() => {
+    const reload = () => {
+      setReadIds((prev) => {
+        const fresh = loadIds(READ_KEY);
+        return sameSet(prev, fresh) ? prev : fresh;
+      });
+      setDeletedIds((prev) => {
+        const fresh = loadIds(DEL_KEY);
+        return sameSet(prev, fresh) ? prev : fresh;
+      });
+    };
+    window.addEventListener("focus", reload);
+    window.addEventListener("visibilitychange", reload);
+    return () => {
+      window.removeEventListener("focus", reload);
+      window.removeEventListener("visibilitychange", reload);
+    };
+  }, []);
+
   // Synchronisation entre instances (cloche desktop / cloche mobile)
   useEffect(() => {
-    const sync = () => {
-      const r = loadIds(READ_KEY);
-      const d = loadIds(DEL_KEY);
-      setReadIds((prev) => (sameSet(prev, r) ? prev : r));
-      setDeletedIds((prev) => (sameSet(prev, d) ? prev : d));
+    const sync = (e) => {
+      // En cas de storage event (autre onglet), recharger tout
+      if (e.type === "storage") {
+        setReadIds(loadIds(READ_KEY));
+        setDeletedIds(loadIds(DEL_KEY));
+        return;
+      }
+      setReadIds((prev) => {
+        const fresh = loadIds(READ_KEY);
+        return sameSet(prev, fresh) ? prev : fresh;
+      });
+      setDeletedIds((prev) => {
+        const fresh = loadIds(DEL_KEY);
+        return sameSet(prev, fresh) ? prev : fresh;
+      });
     };
     window.addEventListener(SYNC_EVENT, sync);
     window.addEventListener("storage", sync);
@@ -165,10 +192,8 @@ export function useNotifState(items) {
     };
   }, []);
 
-  const allIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
-
-  useEffect(() => { if (allIds.size > 0) persistIds(READ_KEY, readIds, allIds); }, [readIds, allIds]);
-  useEffect(() => { if (allIds.size > 0) persistIds(DEL_KEY, deletedIds, allIds); }, [deletedIds, allIds]);
+  useEffect(() => { persistIds(READ_KEY, readIds); }, [readIds]);
+  useEffect(() => { persistIds(DEL_KEY, deletedIds); }, [deletedIds]);
 
   const visibleItems = useMemo(
     () => items.filter((i) => !deletedIds.has(i.id)),
